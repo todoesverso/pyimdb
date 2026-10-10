@@ -68,5 +68,130 @@
     "title": "Typecast Hall of Fame: same character, most movies",
     "description": "Actors who played the exact same character in the most movies with 25k+ votes, and how many years they were stuck in the role.",
     "sql": "WITH roles AS (\n  SELECT c.person_id, c.characters AS role,\n         COUNT(*) AS movies,\n         MIN(ti.premiered) AS first_year, MAX(ti.premiered) AS last_year,\n         AVG(r.rating) AS avg_rating\n  FROM ratings r\n  CROSS JOIN titles ti ON ti.title_id = r.title_id AND ti.type = 'movie'\n  CROSS JOIN crew c ON c.title_id = r.title_id\n  WHERE r.votes > 25000\n    AND c.category IN ('actor', 'actress')\n    AND c.characters IS NOT NULL\n    AND c.characters NOT LIKE '%Himself%' AND c.characters NOT LIKE '%Herself%'\n  GROUP BY c.person_id, c.characters\n  HAVING COUNT(*) >= 4\n)\nSELECT p.name,\n       REPLACE(TRIM(roles.role, '[]' || char(34)), char(34) || ',' || char(34), ' / ') AS role,\n       roles.movies,\n       roles.first_year, roles.last_year,\n       roles.last_year - roles.first_year AS years_in_role,\n       ROUND(roles.avg_rating, 1) AS avg_rating\nFROM roles JOIN people p ON p.person_id = roles.person_id\nORDER BY roles.movies DESC, years_in_role DESC\nLIMIT 40"
+  },
+  {
+    "title": "The Kings and Queens of Trash",
+    "description": "Actors and actresses who have appeared in the highest number of legitimately terrible movies (rated under 4.0 with at least 5,000 votes to ensure they are widely disliked, not just obscure).",
+    "sql": "SELECT p.name,\n       COUNT(*) AS terrible_movies,\n       ROUND(AVG(r.rating), 2) AS avg_terrible_rating\nFROM ratings r\nJOIN titles t ON t.title_id = r.title_id\nJOIN crew c ON c.title_id = r.title_id\nJOIN people p ON p.person_id = c.person_id\nWHERE r.rating < 4.0 AND r.votes > 5000 AND +t.type = 'movie'\n  AND c.category IN ('actor', 'actress')\nGROUP BY p.person_id\nORDER BY terrible_movies DESC, avg_terrible_rating ASC\nLIMIT 25;"
+  },
+  {
+    "title": "The Ultimate Ego Trip (That Backfired)",
+    "description": "People who directed and acted in their own movie, resulting in an absolute disaster. This isolates self-directed vanity projects with more than 10,000 votes, ranked from worst rating to best.",
+    "sql": "SELECT p.name AS the_ego,\n       t.primary_title AS the_disaster,\n       r.rating,\n       r.votes\nFROM titles t\nJOIN ratings r ON t.title_id = r.title_id\nJOIN crew c1 ON c1.title_id = t.title_id AND c1.category = 'director'\nJOIN crew c2 ON c2.title_id = t.title_id AND c2.category IN ('actor', 'actress')\n  AND c1.person_id = c2.person_id\nJOIN people p ON p.person_id = c1.person_id\nWHERE +t.type = 'movie' AND r.votes > 10000\nORDER BY r.rating ASC, r.votes DESC\nLIMIT 25;"
+  },
+  {
+    "title": "The \"Himself\" Cinematic Universe",
+    "description": "Actors who have made a career out of literally just playing themselves. This counts how many times an actor's character name includes \"Himself\" or \"Herself\" in narrative movies (filtering out micro-budget projects with a 1,000-vote threshold).",
+    "sql": "SELECT p.name,\n       COUNT(*) AS times_played_self\nFROM ratings r\nJOIN titles t ON t.title_id = r.title_id\nJOIN crew c ON c.title_id = r.title_id\nJOIN people p ON p.person_id = c.person_id\nWHERE +t.type = 'movie'\n  AND r.votes > 1000\n  AND c.category IN ('actor', 'actress')\n  AND (c.characters LIKE '%Himself%' OR c.characters LIKE '%Herself%')\nGROUP BY p.person_id\nORDER BY times_played_self DESC\nLIMIT 25;"
+  },
+  {
+    "title": "The \"Mic Drop\" Directors (One-Hit Wonders)",
+    "description": "Directors who have directed exactly one movie in their entire career, but it is an absolute masterpiece (8.0+ rating with over 100,000 votes). They nailed it on the first try and never directed again.",
+    "sql": "WITH dir_counts AS (\n  SELECT c.person_id, COUNT(*) AS total_movies\n  FROM crew c JOIN titles t ON t.title_id = c.title_id\n  WHERE c.category = 'director' AND +t.type = 'movie'\n  GROUP BY c.person_id\n)\nSELECT p.name AS director,\n       t.primary_title AS the_masterpiece,\n       t.premiered AS year,\n       r.rating,\n       r.votes\nFROM dir_counts dc\nJOIN crew c ON c.person_id = dc.person_id\nJOIN titles t ON t.title_id = c.title_id\nJOIN ratings r ON r.title_id = t.title_id\nJOIN people p ON p.person_id = dc.person_id\nWHERE dc.total_movies = 1\n  AND c.category = 'director'\n  AND r.votes > 100000\n  AND r.rating >= 8.0\nORDER BY r.rating DESC, r.votes DESC\nLIMIT 25;"
+  },
+  {
+    "title": "Obnoxiously Long Movie Titles",
+    "description": "Movies with the longest primary titles in the database (requiring at least 5,000 votes so they are actual recognized releases, not spam entries).",
+    "sql": "SELECT primary_title,\n       LENGTH(primary_title) AS character_count,\n       premiered AS year,\n       r.rating\nFROM titles t\nJOIN ratings r ON t.title_id = r.title_id\nWHERE +t.type = 'movie' AND r.votes > 5000\nORDER BY character_count DESC\nLIMIT 25;"
+  },
+  {
+    "title": "The Human Sequel Machine",
+    "description": "Actors with the most movies that have more than 100,000 votes. Who seems contractually obligated to appear in everything?",
+    "sql": "SELECT p.name, COUNT(DISTINCT t.title_id) AS movies, ROUND(AVG(r.rating), 2) AS avg_rating, ROUND(AVG(r.votes)) AS avg_votes\nFROM crew c\nJOIN people p ON p.person_id = c.person_id\nJOIN titles t ON t.title_id = c.title_id\nJOIN ratings r ON r.title_id = t.title_id\nWHERE c.category IN ('actor', 'actress') AND t.type = 'movie' AND r.votes > 100000\nGROUP BY p.person_id\nORDER BY movies DESC, avg_rating DESC\nLIMIT 30"
+  },
+  {
+    "title": "The One-Star Wonder Factory",
+    "description": "Actors who appear in the most widely disliked movies: ratings below 4.0 with at least 5,000 votes.",
+    "sql": "SELECT p.name, COUNT(DISTINCT t.title_id) AS disasters, ROUND(AVG(r.rating), 2) AS avg_rating, MIN(r.rating) AS worst_rating\nFROM crew c\nJOIN people p ON p.person_id = c.person_id\nJOIN titles t ON t.title_id = c.title_id\nJOIN ratings r ON r.title_id = t.title_id\nWHERE c.category IN ('actor', 'actress') AND t.type = 'movie' AND r.rating < 4.0 AND r.votes >= 5000\nGROUP BY p.person_id\nORDER BY disasters DESC, avg_rating ASC\nLIMIT 30"
+  },
+  {
+    "title": "The Director Who Should Have Retired Early",
+    "description": "Directors whose first movie was rated higher than every later movie, requiring at least four rated movies. Release year and title break ties.",
+    "sql": "WITH films AS (\n  SELECT c.person_id, t.title_id, t.primary_title, t.premiered, r.rating,\n         ROW_NUMBER() OVER (PARTITION BY c.person_id ORDER BY t.premiered, t.title_id) AS film_number\n  FROM crew c\n  JOIN titles t ON t.title_id = c.title_id\n  JOIN ratings r ON r.title_id = t.title_id\n  WHERE c.category = 'director' AND t.type = 'movie' AND t.premiered IS NOT NULL AND r.votes >= 1000\n), careers AS (\n  SELECT person_id, COUNT(*) AS movies,\n         MAX(CASE WHEN film_number = 1 THEN primary_title END) AS first_movie,\n         MAX(CASE WHEN film_number = 1 THEN rating END) AS first_rating,\n         MAX(CASE WHEN film_number > 1 THEN rating END) AS best_later_rating\n  FROM films GROUP BY person_id HAVING COUNT(*) >= 4\n)\nSELECT p.name AS director, c.first_movie, c.first_rating, c.best_later_rating, c.movies\nFROM careers c JOIN people p ON p.person_id = c.person_id\nWHERE c.first_rating > c.best_later_rating\nORDER BY c.first_rating - c.best_later_rating DESC\nLIMIT 30"
+  },
+  {
+    "title": "The Impossible Workaholic",
+    "description": "Actors with the most movie releases in a single year, requiring at least 1,000 votes per movie.",
+    "sql": "SELECT p.name, t.premiered AS year, COUNT(DISTINCT t.title_id) AS movies, ROUND(AVG(r.rating), 2) AS avg_rating\nFROM crew c\nJOIN people p ON p.person_id = c.person_id\nJOIN titles t ON t.title_id = c.title_id\nJOIN ratings r ON r.title_id = t.title_id\nWHERE c.category IN ('actor', 'actress') AND t.type = 'movie' AND t.premiered IS NOT NULL AND r.votes >= 1000\nGROUP BY c.person_id, t.premiered\nHAVING COUNT(DISTINCT t.title_id) >= 5\nORDER BY movies DESC, avg_rating DESC\nLIMIT 30"
+  },
+  {
+    "title": "The Actor Who Never Had a Bad Day",
+    "description": "Actors with at least five movies with 10,000+ votes, all rated 7.0 or higher.",
+    "sql": "SELECT p.name, COUNT(DISTINCT t.title_id) AS movies, ROUND(AVG(r.rating), 2) AS avg_rating, MIN(r.rating) AS lowest_rating\nFROM crew c\nJOIN people p ON p.person_id = c.person_id\nJOIN titles t ON t.title_id = c.title_id\nJOIN ratings r ON r.title_id = t.title_id\nWHERE c.category IN ('actor', 'actress') AND t.type = 'movie' AND r.votes >= 10000\nGROUP BY c.person_id\nHAVING COUNT(DISTINCT t.title_id) >= 5 AND MIN(r.rating) >= 7.0\nORDER BY movies DESC, avg_rating DESC\nLIMIT 30"
+  },
+  {
+    "title": "The Movie That Everyone Hates but Everyone Watched",
+    "description": "Widely watched movies with ratings below 4.0 and at least 50,000 votes. Cinematic train wrecks people couldn't look away from.",
+    "sql": "SELECT t.primary_title, t.premiered AS year, r.rating, r.votes\nFROM titles t JOIN ratings r ON r.title_id = t.title_id\nWHERE t.type = 'movie' AND r.rating < 4.0 AND r.votes >= 50000\nORDER BY r.votes DESC\nLIMIT 30"
+  },
+  {
+    "title": "The Most Controversial Movies",
+    "description": "High-vote movies with ratings closest to 5.0. This is only a rough proxy for divisiveness because the schema does not include the vote distribution.",
+    "sql": "SELECT t.primary_title, t.premiered AS year, r.rating, r.votes, ABS(r.rating - 5.0) AS distance_from_middle\nFROM titles t JOIN ratings r ON r.title_id = t.title_id\nWHERE t.type = 'movie' AND r.votes >= 100000\nORDER BY distance_from_middle ASC, r.votes DESC\nLIMIT 30"
+  },
+  {
+    "title": "The Director-Actor Identity Crisis",
+    "description": "People who direct and act in the same movie, ranked by the number of such well-known movies and their average rating.",
+    "sql": "SELECT p.name, COUNT(DISTINCT t.title_id) AS self_directed_movies, ROUND(AVG(r.rating), 2) AS avg_rating, MIN(r.rating) AS worst_rating, MAX(r.rating) AS best_rating\nFROM crew d\nJOIN crew a ON a.title_id = d.title_id AND a.person_id = d.person_id\nJOIN people p ON p.person_id = d.person_id\nJOIN titles t ON t.title_id = d.title_id\nJOIN ratings r ON r.title_id = t.title_id\nWHERE d.category = 'director' AND a.category IN ('actor', 'actress') AND t.type = 'movie' AND r.votes >= 1000\nGROUP BY p.person_id\nHAVING COUNT(DISTINCT t.title_id) >= 2\nORDER BY self_directed_movies DESC, avg_rating DESC\nLIMIT 30"
+  },
+  {
+    "title": "The Movie Title Copycats",
+    "description": "Movie titles reused at least three times, with release-year range and all recorded release years. Repeated titles are not necessarily remakes.",
+    "sql": "SELECT LOWER(primary_title) AS normalized_title, COUNT(*) AS movie_count, MIN(premiered) AS first_year, MAX(premiered) AS last_year, GROUP_CONCAT(premiered, ', ') AS release_years\nFROM titles\nWHERE type = 'movie' AND primary_title IS NOT NULL\nGROUP BY LOWER(primary_title)\nHAVING COUNT(*) >= 3\nORDER BY movie_count DESC, normalized_title\nLIMIT 40"
+  },
+  {
+    "title": "The Most Overworked Supporting Cast",
+    "description": "Actors with at least 20 movies with 1,000+ votes who do not appear in the top 100 rated movies with at least 10,000 votes.",
+    "sql": "WITH actor_films AS (\n  SELECT DISTINCT c.person_id, t.title_id, r.rating\n  FROM crew c JOIN titles t ON t.title_id = c.title_id JOIN ratings r ON r.title_id = t.title_id\n  WHERE c.category IN ('actor', 'actress') AND t.type = 'movie' AND r.votes >= 1000\n), top_movies AS (\n  SELECT title_id FROM ratings WHERE votes >= 10000 ORDER BY rating DESC, votes DESC LIMIT 100\n)\nSELECT p.name, COUNT(*) AS movies, ROUND(AVG(af.rating), 2) AS avg_rating\nFROM actor_films af JOIN people p ON p.person_id = af.person_id\nLEFT JOIN top_movies tm ON tm.title_id = af.title_id\nGROUP BY af.person_id\nHAVING COUNT(*) >= 20 AND SUM(CASE WHEN tm.title_id IS NOT NULL THEN 1 ELSE 0 END) = 0\nORDER BY movies DESC, avg_rating DESC\nLIMIT 30"
+  },
+  {
+    "title": "The Eternal Teenager",
+    "description": "Actors appearing in movies released when they were at least 80 years old, according to recorded birth and release years.",
+    "sql": "SELECT p.name, t.primary_title, t.premiered AS movie_year, p.born AS birth_year, t.premiered - p.born AS age_at_release, r.rating\nFROM crew c JOIN people p ON p.person_id = c.person_id JOIN titles t ON t.title_id = c.title_id JOIN ratings r ON r.title_id = t.title_id\nWHERE c.category IN ('actor', 'actress') AND t.type = 'movie' AND p.born IS NOT NULL AND t.premiered IS NOT NULL AND t.premiered - p.born >= 80 AND r.votes >= 1000\nORDER BY age_at_release DESC, r.votes DESC\nLIMIT 30"
+  },
+  {
+    "title": "The Shortest Movies with the Biggest Reputations",
+    "description": "Movies no longer than 45 minutes that still attracted at least 10,000 votes, ranked by vote count.",
+    "sql": "SELECT t.primary_title, t.premiered AS year, t.runtime_minutes, r.rating, r.votes\nFROM titles t JOIN ratings r ON r.title_id = t.title_id\nWHERE t.type = 'movie' AND t.runtime_minutes BETWEEN 1 AND 45 AND r.votes >= 10000\nORDER BY r.votes DESC, r.rating DESC\nLIMIT 30"
+  },
+  {
+    "title": "The Actors Who Have Been Around Forever",
+    "description": "Actors whose rated movie appearances span the longest period, requiring at least 10 movies with 1,000+ votes.",
+    "sql": "SELECT p.name, MIN(t.premiered) AS first_movie, MAX(t.premiered) AS last_movie, MAX(t.premiered) - MIN(t.premiered) AS career_span, COUNT(DISTINCT t.title_id) AS movies\nFROM crew c JOIN people p ON p.person_id = c.person_id JOIN titles t ON t.title_id = c.title_id JOIN ratings r ON r.title_id = t.title_id\nWHERE c.category IN ('actor', 'actress') AND t.type = 'movie' AND t.premiered IS NOT NULL AND r.votes >= 1000\nGROUP BY p.person_id\nHAVING COUNT(DISTINCT t.title_id) >= 10\nORDER BY career_span DESC, movies DESC\nLIMIT 30"
+  },
+  {
+    "title": "The Genre Chameleons",
+    "description": "Actors with credits in the widest variety of movie genres, counting distinct comma-separated genres from the titles view. Requires SQLite JSON support.",
+    "sql": "WITH actor_genres AS (\n  SELECT DISTINCT c.person_id, TRIM(g.value) AS genre\n  FROM crew c JOIN titles t ON t.title_id = c.title_id JOIN ratings r ON r.title_id = t.title_id\n  JOIN json_each('[\"' || REPLACE(COALESCE(t.genres, ''), ',', '\",\"') || '\"]') g\n  WHERE c.category IN ('actor', 'actress') AND t.type = 'movie' AND r.votes >= 1000 AND TRIM(g.value) <> '' AND t.genres <> 'N/A'\n)\nSELECT p.name, COUNT(*) AS different_genres, GROUP_CONCAT(genre, ', ') AS genres\nFROM actor_genres ag JOIN people p ON p.person_id = ag.person_id\nGROUP BY ag.person_id\nHAVING COUNT(*) >= 10\nORDER BY different_genres DESC, p.name\nLIMIT 30"
+  },
+  {
+    "title": "The TV Series That Refuses to Die",
+    "description": "TV series with the longest span between recorded start and end years. Only titles with both years recorded are included.",
+    "sql": "SELECT t.primary_title, t.premiered AS start_year, t.ended AS end_year, t.ended - t.premiered AS years_running, r.rating, r.votes\nFROM titles t JOIN ratings r ON r.title_id = t.title_id\nWHERE t.type = 'tvSeries' AND t.premiered IS NOT NULL AND t.ended IS NOT NULL AND t.ended >= t.premiered\nORDER BY years_running DESC, r.votes DESC\nLIMIT 30"
+  },
+  {
+    "title": "The Actor Pair That Keeps Reuniting",
+    "description": "Pairs of actors who appear together in at least five movies with 25,000+ votes.",
+    "sql": "WITH appearances AS (\n  SELECT DISTINCT c.title_id, c.person_id\n  FROM crew c JOIN titles t ON t.title_id = c.title_id JOIN ratings r ON r.title_id = t.title_id\n  WHERE c.category IN ('actor', 'actress') AND t.type = 'movie' AND r.votes >= 25000\n)\nSELECT p1.name AS actor_1, p2.name AS actor_2, COUNT(*) AS movies_together\nFROM appearances a JOIN appearances b ON b.title_id = a.title_id AND b.person_id > a.person_id\nJOIN people p1 ON p1.person_id = a.person_id JOIN people p2 ON p2.person_id = b.person_id\nGROUP BY a.person_id, b.person_id\nHAVING COUNT(*) >= 5\nORDER BY movies_together DESC\nLIMIT 30"
+  },
+  {
+    "title": "The Director Whose Movies Get Worse with Age",
+    "description": "Directors with at least eight well-known movies, comparing average ratings in the earlier and later halves of their release-ordered filmography.",
+    "sql": "WITH films AS (\n  SELECT c.person_id, t.premiered, r.rating,\n         ROW_NUMBER() OVER (PARTITION BY c.person_id ORDER BY t.premiered, t.title_id) AS rn,\n         COUNT(*) OVER (PARTITION BY c.person_id) AS total\n  FROM crew c JOIN titles t ON t.title_id = c.title_id JOIN ratings r ON r.title_id = t.title_id\n  WHERE c.category = 'director' AND t.type = 'movie' AND t.premiered IS NOT NULL AND r.votes >= 5000\n), halves AS (\n  SELECT person_id,\n         AVG(CASE WHEN rn <= total / 2.0 THEN rating END) AS early_avg,\n         AVG(CASE WHEN rn > total / 2.0 THEN rating END) AS late_avg,\n         MAX(total) AS movies\n  FROM films GROUP BY person_id\n)\nSELECT p.name, h.movies, ROUND(h.early_avg, 2) AS early_avg, ROUND(h.late_avg, 2) AS late_avg, ROUND(h.late_avg - h.early_avg, 2) AS rating_change\nFROM halves h JOIN people p ON p.person_id = h.person_id\nWHERE h.movies >= 8 AND h.early_avg IS NOT NULL AND h.late_avg IS NOT NULL\nORDER BY rating_change ASC\nLIMIT 30"
+  },
+  {
+    "title": "The Most Misleading Movie Titles",
+    "description": "Movies sharing a title but released in different years, ranked by the largest difference in IMDb rating. Shared titles do not prove a remake relationship.",
+    "sql": "SELECT a.primary_title, a.premiered AS year_1, ra.rating AS rating_1, b.premiered AS year_2, rb.rating AS rating_2, ROUND(ABS(ra.rating - rb.rating), 2) AS rating_gap\nFROM titles a JOIN titles b ON LOWER(a.primary_title) = LOWER(b.primary_title) AND a.title_id < b.title_id AND a.premiered IS NOT NULL AND b.premiered IS NOT NULL AND a.premiered <> b.premiered\nJOIN ratings ra ON ra.title_id = a.title_id JOIN ratings rb ON rb.title_id = b.title_id\nWHERE a.type = 'movie' AND b.type = 'movie' AND ra.votes >= 5000 AND rb.votes >= 5000\nORDER BY rating_gap DESC\nLIMIT 30"
+  },
+  {
+    "title": "The Most Unproductive Movie Decade for an Actor",
+    "description": "Actor-decade combinations with the lowest average ratings, requiring at least five movies with 1,000+ votes in that decade.",
+    "sql": "SELECT p.name, (t.premiered / 10) * 10 AS decade, COUNT(DISTINCT t.title_id) AS movies, ROUND(AVG(r.rating), 2) AS avg_rating\nFROM crew c JOIN people p ON p.person_id = c.person_id JOIN titles t ON t.title_id = c.title_id JOIN ratings r ON r.title_id = t.title_id\nWHERE c.category IN ('actor', 'actress') AND t.type = 'movie' AND t.premiered IS NOT NULL AND r.votes >= 1000\nGROUP BY c.person_id, (t.premiered / 10) * 10\nHAVING COUNT(DISTINCT t.title_id) >= 5\nORDER BY avg_rating ASC, movies DESC\nLIMIT 30"
+  },
+  {
+    "title": "The Most Confusing Person in IMDb",
+    "description": "People credited in the widest variety of IMDb principal-credit categories, with their number of distinct credited titles.",
+    "sql": "SELECT p.name, COUNT(DISTINCT c.category) AS categories, GROUP_CONCAT(DISTINCT c.category) AS jobs, COUNT(DISTINCT c.title_id) AS credited_titles\nFROM crew c JOIN people p ON p.person_id = c.person_id\nGROUP BY c.person_id\nHAVING COUNT(DISTINCT c.category) >= 5\nORDER BY categories DESC, credited_titles DESC\nLIMIT 30"
   }
 ]
