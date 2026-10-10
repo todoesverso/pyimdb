@@ -2,7 +2,7 @@
   {
     "title": "Top-rated movies (100k+ votes)",
     "description": "The classic: best-rated movies that lots of people have voted on.",
-    "sql": "SELECT t.primary_title, t.premiered AS year, r.rating, r.votes\nFROM ratings r JOIN titles t ON t.title_id = r.title_id\nWHERE r.votes > 100000 AND +t.type = 'movie'  -- the \"+\" keeps SQLite from using the type index (faster)\nORDER BY r.rating DESC, r.votes DESC\nLIMIT 50"
+    "sql": "-- Top-rated movies\nSELECT t.primary_title, t.premiered AS year, r.rating, r.votes\nFROM ratings r JOIN titles t ON t.title_id = r.title_id\nWHERE r.votes > 100000 AND +t.type = 'movie'  -- the \"+\" keeps SQLite from using the type index (faster)\nORDER BY r.rating DESC, r.votes DESC\nLIMIT 50"
   },
   {
     "title": "Top-rated TV shows (100k+ votes)",

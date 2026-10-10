@@ -35,6 +35,7 @@
         </label>
         <label for="query-history">Recent queries
           <select id="query-history"><option value="">No recent queries</option></select>
+          <span class="history-hint m">Start with <code>-- title</code> to name a query.</span>
         </label>
       </div>
       <button id="clear-history" class="mini" type="button">Clear history</button>
@@ -67,16 +68,18 @@
           </label>
           <label>X / labels <select id="chart-x"></select></label>
           <span id="chart-y" class="ys"></span>
-          <button id="chart-png" class="mini">Download PNG</button>
+          <button id="chart-download" class="mini">Download chart</button>
         </div>
-        <div id="chart-msg" class="m"></div>
-        <div class="chart-box"><canvas id="chart"></canvas></div>
+        <div id="chart-msg" class="m" role="status" aria-live="polite"></div>
+        <div class="chart-box">
+          <canvas id="chart" aria-label="Query chart" role="img"></canvas>
+          <div id="chart-fallback" hidden></div>
+        </div>
       </div>
     </main>
   </div>
 
   <footer class="m" id="info"></footer>
-  <script src="/static/vendor/chart.umd.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.20/codemirror.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.20/mode/sql/sql.min.js"></script>
   <script src="/static/sql.js"></script>

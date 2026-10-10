@@ -67,6 +67,7 @@ details.rawgroup { margin-top: .6rem; border-top: 1px solid #eee; padding-top: .
 select { width: 100%; padding: .45rem; font-size: 1rem; margin: .2rem 0; box-sizing: border-box; border: 1px solid #b7c2bc; border-radius: 3px; background: #fff; color: var(--ink); }
 .query-tools { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: .8rem; }
 .query-tools label { font-size: .9rem; font-weight: 650; }
+.history-hint { display: block; margin-top: .1rem; font-weight: 400; }
 #clear-history { margin: .15rem 0 .25rem; }
 @media (max-width: 800px) {
   .layout { flex-direction: column; }
@@ -82,8 +83,18 @@ select { width: 100%; padding: .45rem; font-size: 1rem; margin: .2rem 0; box-siz
 .tab.active { border-color: var(--line); background: #fff; margin-bottom: -1px; font-weight: 600; }
 .chart-controls { display: flex; flex-wrap: wrap; gap: .5rem 1rem; align-items: center; margin: .8rem 0 .4rem; font-size: .9rem; }
 .chart-controls select { width: auto; margin: 0 0 0 .3rem; padding: .25rem; font-size: .9rem; }
-.ys label { margin-right: .7rem; white-space: nowrap; }
-.chart-box { position: relative; width: 100%; }
+.chart-controls .ys { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: .35rem .7rem; }
+.chart-controls .ys label { display: inline-flex; flex: 0 0 auto; align-items: center; gap: .3rem; margin: 0; white-space: nowrap; }
+.chart-controls .ys input[type="checkbox"] { width: auto; margin: 0; accent-color: var(--focus); }
+.chart-box { position: relative; width: 100%; min-width: 0; }
+#chart-fallback { width: 100%; overflow-x: auto; }
+#chart-fallback svg { display: block; width: 100%; height: auto; font-family: system-ui, sans-serif; }
+@media (max-width: 560px) {
+  .chart-controls label { flex: 1 1 100%; }
+  .chart-controls .ys { flex: 1 1 100%; }
+  .chart-controls .ys label { flex: 0 0 auto; }
+  .chart-controls select { max-width: 100%; }
+}
 
 
 
