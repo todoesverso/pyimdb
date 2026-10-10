@@ -1,3 +1,4 @@
+import json
 import os
 import sqlite3
 import tempfile
@@ -86,6 +87,28 @@ class AppTestCase(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json, [])
+
+    def test_access_log_is_structured_and_omits_query_string(self):
+        search_term = "private-search-term"
+        with self.assertLogs("imdb.access", level="INFO") as captured:
+            response = self.client.get(
+                f"/api/search?q={search_term}",
+                headers={
+                    "CF-Connecting-IP": "203.0.113.7",
+                    "CF-Ray": "test-ray-id",
+                },
+            )
+
+        entry = json.loads(captured.records[0].getMessage())
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["X-Request-ID"], entry["request_id"])
+        self.assertEqual(entry["client_ip"], "203.0.113.7")
+        self.assertEqual(entry["cf_ray"], "test-ray-id")
+        self.assertEqual(entry["method"], "GET")
+        self.assertEqual(entry["path"], "/api/search")
+        self.assertEqual(entry["status"], 200)
+        self.assertGreaterEqual(entry["duration_ms"], 0)
+        self.assertNotIn(search_term, captured.output[0])
 
     def test_title_and_person_detail_routes(self):
         title_response = self.client.get("/api/title/tt0000001")

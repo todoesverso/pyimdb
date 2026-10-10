@@ -9,10 +9,13 @@ Normally run via Docker (see docker-compose.yml). Without Docker:
 
 import os
 import re
+import json
+import logging
 import sqlite3
 import sys
 import threading
 import time
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -39,6 +42,41 @@ limiter = Limiter(
     default_limits=["60 per minute"],
     storage_uri="memory://",
 )
+
+access_logger = logging.getLogger("imdb.access")
+access_logger.setLevel(logging.INFO)
+access_logger.propagate = False
+if not access_logger.handlers:
+    access_handler = logging.StreamHandler(sys.stdout)
+    access_handler.setFormatter(logging.Formatter("%(message)s"))
+    access_logger.addHandler(access_handler)
+
+
+@app.before_request
+def start_access_log():
+    g.request_id = uuid.uuid4().hex
+    g.request_started_at = time.monotonic()
+
+
+@app.after_request
+def write_access_log(response):
+    request_id = getattr(g, "request_id", uuid.uuid4().hex)
+    response.headers["X-Request-ID"] = request_id
+    if request.path != "/healthz":
+        entry = {
+            "timestamp": datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
+            "request_id": request_id,
+            "cf_ray": request.headers.get("CF-Ray", "")[:80],
+            "client_ip": (request.headers.get("CF-Connecting-IP") or request.remote_addr or "")[:64],
+            "method": request.method,
+            "path": request.path,
+            "status": response.status_code,
+            "duration_ms": round((time.monotonic() - g.request_started_at) * 1000),
+            "response_bytes": response.content_length,
+            "user_agent": request.headers.get("User-Agent", "")[:256],
+        }
+        access_logger.info(json.dumps(entry, separators=(",", ":"), ensure_ascii=True))
+    return response
 
 
 # Views that give a pyimdb.py-style database (title_basics, title_ratings, ...)

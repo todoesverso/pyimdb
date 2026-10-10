@@ -69,6 +69,7 @@ The app's host port is bound to localhost; Cloudflare Tunnel connects outbound, 
 - SQL console with schema browser, examples, local recent-query history, charts, and chart export
 - SQL is run against a read-only SQLite connection. The console limits query duration, result rows, cell length, request rates, per-IP query time, and concurrent queries.
 - The query budgets are in process memory, so the app is configured for one Gunicorn worker with multiple threads.
+- JSON access logs go to container stdout and include client IP, Cloudflare Ray ID, request ID, method, path, status, duration, response size, and user agent. Query strings and request bodies are intentionally omitted; `/healthz` probes are not logged. Docker retains at most five 10 MB log files, so export logs elsewhere if longer retention is needed.
 - Chart.js and CodeMirror are loaded from pinned CDNJS URLs. The SQL editor falls back to a textarea, and charts fall back to native SVG if their CDN library is unavailable.
 
 The database is not included in Git. `data/`, download caches, and generated database files are ignored. Build or copy the database onto the host before starting the app.

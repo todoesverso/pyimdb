@@ -22,4 +22,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=15s \
 
 # ONE worker + threads: per-IP query budgets are kept in process memory
 CMD ["gunicorn", "--no-control-socket", "-w", "1", "--threads", "4", "--timeout", "30", \
-     "--access-logfile", "-", "-b", "0.0.0.0:8000", "app:app"]
+  "-b", "0.0.0.0:8000", "app:app"]
