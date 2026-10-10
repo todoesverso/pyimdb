@@ -22,7 +22,7 @@ PY          := venv/bin/python
 .DEFAULT_GOAL := help
 .PHONY: help fetch import import-slim update update-slim cron-install cron-remove index build-search \
 	    build up down restart logs ps stats shell health test tunnel tunnel-logs tunnel-stop \
-	    venv dev dev-index clean check-data check-env check-pyimdb
+	    unit-test venv dev dev-index clean check-data check-env check-pyimdb
 
 help: ## Show this help
 	@echo "imdb-web targets (override vars like: make up PORT=9000):"
@@ -114,6 +114,9 @@ test: ## Smoke-test search, the SQL console, and write-protection
 	    -d '{"sql":"delete from titles"}' http://127.0.0.1:$(PORT)/api/query) || { echo "Delete request failed"; exit 1; }; \
 	  test "$$code" = 400 || { echo "Expected HTTP 400 for DELETE, got $$code"; exit 1; }; \
 	  echo "Write blocked (HTTP $$code)"
+
+unit-test: ## Run isolated application unit tests (no live server or IMDb database needed)
+	$(PY) -m unittest discover -s tests -v
 
 # -------------------------------------------------------------- public
 
