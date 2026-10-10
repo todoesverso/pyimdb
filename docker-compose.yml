@@ -1,0 +1,44 @@
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    environment:
+      IMDB_DB: /data/imdb.db
+    volumes:
+      - ./data:/data:ro              # put imdb.db in ./data/
+    ports:
+      - "127.0.0.1:8000:8000"        # localhost only; the tunnel reaches it over the compose network
+    # --- hardening ---
+    read_only: true
+    tmpfs:
+      - /tmp:size=512m               # SQLite temp files for sorts/joins
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 1g
+    cpus: 2
+    pids_limit: 200
+
+  # One-off job: builds the full-text search index inside imdb.db
+  #   docker compose --profile tools run --rm build-search
+  build-search:
+    build: .
+    profiles: ["tools"]
+    user: root
+    command: ["python", "app.py", "--build-search"]
+    environment:
+      IMDB_DB: /data/imdb.db
+    volumes:
+      - ./data:/data
+
+  # Public access via Cloudflare Tunnel (no router ports opened)
+  #   docker compose --profile tunnel up -d
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    profiles: ["tunnel"]
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN}
+    depends_on:
+      - app

@@ -1,0 +1,72 @@
+[
+  {
+    "title": "Top-rated movies (100k+ votes)",
+    "description": "The classic: best-rated movies that lots of people have voted on.",
+    "sql": "SELECT t.primary_title, t.premiered AS year, r.rating, r.votes\nFROM ratings r JOIN titles t ON t.title_id = r.title_id\nWHERE r.votes > 100000 AND +t.type = 'movie'  -- the \"+\" keeps SQLite from using the type index (faster)\nORDER BY r.rating DESC, r.votes DESC\nLIMIT 50"
+  },
+  {
+    "title": "Top-rated TV shows (100k+ votes)",
+    "description": "Series and miniseries with more than 100,000 votes, best rated first.",
+    "sql": "SELECT t.primary_title, t.premiered AS start_year, t.ended AS end_year,\n       r.rating, r.votes\nFROM ratings r JOIN titles t ON t.title_id = r.title_id\nWHERE r.votes > 100000 AND +t.type IN ('tvSeries', 'tvMiniSeries')  -- the \"+\" keeps SQLite from using the type index (faster)\nORDER BY r.rating DESC, r.votes DESC\nLIMIT 50"
+  },
+  {
+    "title": "Actors in the most movies with 100k+ votes",
+    "description": "Actors/actresses ranked by how many movies with more than 100,000 votes they appear in, with the average rating of those movies.",
+    "sql": "WITH big AS (\n  SELECT r.title_id, r.rating\n  FROM ratings r JOIN titles t ON t.title_id = r.title_id\n  WHERE r.votes > 100000 AND +t.type = 'movie'  -- the \"+\" keeps SQLite from using the type index (faster)\n)\nSELECT p.name, COUNT(*) AS big_movies, ROUND(AVG(big.rating), 2) AS avg_rating\nFROM big\nCROSS JOIN crew c ON c.title_id = big.title_id\nJOIN people p ON p.person_id = c.person_id\nWHERE c.category IN ('actor', 'actress')\nGROUP BY c.person_id\nORDER BY big_movies DESC, avg_rating DESC\nLIMIT 50"
+  },
+  {
+    "title": "Actors by average rating of their big movies",
+    "description": "Actors/actresses ranked by the average rating of their movies with 100k+ votes (at least 5 such movies). Takes a few seconds.",
+    "sql": "WITH big AS (\n  SELECT r.title_id, r.rating, r.votes\n  FROM ratings r JOIN titles t ON t.title_id = r.title_id\n  WHERE r.votes > 100000 AND +t.type = 'movie'  -- the \"+\" keeps SQLite from using the type index (faster)\n)\nSELECT p.name,\n       COUNT(*)                AS big_movies,\n       ROUND(AVG(big.rating), 2) AS avg_rating,\n       SUM(big.votes)          AS total_votes\nFROM big\nCROSS JOIN crew c ON c.title_id = big.title_id\nJOIN people p ON p.person_id = c.person_id\nWHERE c.category IN ('actor', 'actress')\nGROUP BY c.person_id\nHAVING big_movies >= 5\nORDER BY avg_rating DESC, big_movies DESC\nLIMIT 50"
+  },
+  {
+    "title": "Actors who always work together",
+    "description": "Pairs of actors who appear together in the most movies with 100k+ votes (at least 4), plus what share of the less-prolific one's big movies it covers. Heavy: uses a good chunk of your budget, and if it hits the 5 s limit, raise 100000 to 300000 in the query.",
+    "sql": "WITH big AS (\n  SELECT r.title_id\n  FROM ratings r JOIN titles t ON t.title_id = r.title_id\n  WHERE r.votes > 100000 AND +t.type = 'movie'  -- the \"+\" keeps SQLite from using the type index (faster)\n),\nactors AS (\n  SELECT c.title_id, c.person_id\n  FROM big CROSS JOIN crew c ON c.title_id = big.title_id\n  WHERE c.category IN ('actor', 'actress')\n),\ntotals AS (\n  SELECT person_id, COUNT(*) AS films FROM actors GROUP BY person_id\n),\npairs AS (\n  SELECT a.person_id AS p1, b.person_id AS p2, COUNT(*) AS together\n  FROM actors a JOIN actors b\n    ON b.title_id = a.title_id AND b.person_id > a.person_id\n  GROUP BY a.person_id, b.person_id\n  HAVING together >= 4\n)\nSELECT n1.name AS actor_1, n2.name AS actor_2,\n       pairs.together AS films_together,\n       t1.films AS actor_1_films, t2.films AS actor_2_films,\n       ROUND(100.0 * pairs.together / MIN(t1.films, t2.films)) AS pct_of_smaller\nFROM pairs\nJOIN totals t1 ON t1.person_id = pairs.p1\nJOIN totals t2 ON t2.person_id = pairs.p2\nJOIN people n1 ON n1.person_id = pairs.p1\nJOIN people n2 ON n2.person_id = pairs.p2\nORDER BY films_together DESC, pct_of_smaller DESC\nLIMIT 50"
+  },
+  {
+    "title": "Directors by average rating of their big movies",
+    "description": "Directors with at least 4 movies over 100k votes, ranked by average rating.",
+    "sql": "WITH big AS (\n  SELECT r.title_id, r.rating\n  FROM ratings r JOIN titles t ON t.title_id = r.title_id\n  WHERE r.votes > 100000 AND +t.type = 'movie'  -- the \"+\" keeps SQLite from using the type index (faster)\n)\nSELECT p.name, COUNT(*) AS big_movies, ROUND(AVG(big.rating), 2) AS avg_rating\nFROM big\nCROSS JOIN crew c ON c.title_id = big.title_id\nJOIN people p ON p.person_id = c.person_id\nWHERE c.category = 'director'\nGROUP BY c.person_id\nHAVING big_movies >= 4\nORDER BY avg_rating DESC, big_movies DESC\nLIMIT 50"
+  },
+  {
+    "title": "Most-voted titles of all time",
+    "description": "The titles with the most votes, any type.",
+    "sql": "SELECT t.primary_title, t.type, t.premiered AS year, r.rating, r.votes\nFROM ratings r JOIN titles t ON t.title_id = r.title_id\nORDER BY r.votes DESC\nLIMIT 50"
+  },
+  {
+    "title": "Filmography of a person (edit the name)",
+    "description": "Change the name in the WHERE clause. Names must match exactly.",
+    "sql": "SELECT t.primary_title, t.type, t.premiered AS year, c.category, r.rating, r.votes\nFROM people p\nJOIN crew c ON c.person_id = p.person_id\nJOIN titles t ON t.title_id = c.title_id\nLEFT JOIN ratings r ON r.title_id = t.title_id\nWHERE p.name = 'Humphrey Bogart'\nORDER BY r.votes DESC\nLIMIT 50"
+  },
+  {
+    "title": "Kevin Bacon number of an actor (edit the name)",
+    "description": "How many movies apart is this person from Kevin Bacon? Searches 2 steps out from each of them and meets in the middle, so it finds numbers up to 4. Only counts actors in movies with 50k+ votes. Empty result means more than 4 steps, or the name isn't in that set. Edit the name in the people lookup.",
+    "sql": "WITH RECURSIVE\nedges AS MATERIALIZED (\n  SELECT c.title_id AS t, c.person_id AS p\n  FROM ratings r\n  CROSS JOIN titles x ON x.title_id = r.title_id AND x.type = 'movie'\n  CROSS JOIN crew c ON c.title_id = r.title_id\n  WHERE r.votes > 50000 AND c.category IN ('actor', 'actress')\n),\nreach(side, p, n) AS (\n  SELECT 'K', 'nm0000102', 0\n  UNION\n  SELECT 'T', person_id, 0 FROM people WHERE name = 'Marlon Brando'\n  UNION\n  SELECT r.side, e2.p, r.n + 1\n  FROM reach r\n  JOIN edges e1 ON e1.p = r.p\n  JOIN edges e2 ON e2.t = e1.t\n  WHERE r.n < 2\n)\nSELECT MIN(a.n + b.n) AS bacon_number\nFROM reach a JOIN reach b ON b.p = a.p\nWHERE a.side = 'K' AND b.side = 'T'"
+  },
+  {
+    "title": "Kevin Bacon path: the movies linking an actor to him (edit the name)",
+    "description": "Shows the actual chain: one row per hop (actor, movie, actor) from the person you name to Kevin Bacon. Same rules as the Bacon number example. No rows means more than 4 steps, or the name isn't in that set.",
+    "sql": "WITH RECURSIVE\nedges AS MATERIALIZED (\n  SELECT c.title_id AS t, c.person_id AS p\n  FROM ratings r\n  CROSS JOIN titles x ON x.title_id = r.title_id AND x.type = 'movie'\n  CROSS JOIN crew c ON c.title_id = r.title_id\n  WHERE r.votes > 50000 AND c.category IN ('actor', 'actress')\n),\nreach(side, p, n, q, t) AS (\n  SELECT 'K', 'nm0000102', 0, NULL, NULL\n  UNION\n  SELECT 'T', person_id, 0, NULL, NULL FROM people WHERE name = 'Marlon Brando'\n  UNION\n  SELECT r.side, e2.p, r.n + 1, r.p, e1.t\n  FROM reach r\n  JOIN edges e1 ON e1.p = r.p\n  JOIN edges e2 ON e2.t = e1.t\n  WHERE r.n < 2\n),\nbest AS (SELECT side, p, MIN(n) AS n, q, t FROM reach GROUP BY side, p),\nmeet AS (\n  SELECT a.p FROM best a JOIN best b ON b.p = a.p\n  WHERE a.side = 'K' AND b.side = 'T'\n  ORDER BY a.n + b.n LIMIT 1\n),\nchain(side, p, n, q, t) AS (\n  SELECT b.side, b.p, b.n, b.q, b.t FROM best b JOIN meet ON b.p = meet.p\n  UNION ALL\n  SELECT b.side, b.p, b.n, b.q, b.t FROM chain c JOIN best b ON b.side = c.side AND b.p = c.q\n)\nSELECT CASE c.side WHEN 'T' THEN pq.name ELSE pp.name END AS from_actor,\n       ti.primary_title || ' (' || ti.premiered || ')' AS movie,\n       CASE c.side WHEN 'T' THEN pp.name ELSE pq.name END AS to_actor\nFROM chain c\nJOIN people pp ON pp.person_id = c.p\nJOIN people pq ON pq.person_id = c.q\nJOIN titles ti ON ti.title_id = c.t\nWHERE c.n > 0\nORDER BY CASE c.side WHEN 'T' THEN c.n ELSE 100 - c.n END"
+  },
+  {
+    "title": "Hollywood's ghosts: actors credited after they died",
+    "description": "Actors whose movie came out years after their death, biggest gap first. Some are CGI resurrections, some are footage shot decades earlier, some are bad data. Movies with 25k+ votes only.",
+    "sql": "SELECT p.name,\n       p.died,\n       ti.primary_title AS movie,\n       ti.premiered,\n       ti.premiered - p.died AS years_after_death,\n       REPLACE(TRIM(c.characters, '[]' || char(34)), char(34) || ',' || char(34), ' / ') AS role\nFROM ratings r\nCROSS JOIN titles ti ON ti.title_id = r.title_id AND ti.type = 'movie'\nCROSS JOIN crew c ON c.title_id = r.title_id\nCROSS JOIN people p ON p.person_id = c.person_id\nWHERE r.votes > 25000\n  AND c.category IN ('actor', 'actress')\n  AND ti.premiered > p.died\nORDER BY years_after_death DESC, r.votes DESC\nLIMIT 40"
+  },
+  {
+    "title": "Vanity project test: do directors get worse when they cast themselves?",
+    "description": "Directors with at least 3 movies where they also act and 3 where they don't. A negative vanity_effect means their self-starring movies rate lower. Flip ASC to DESC to see who actually benefits from putting themselves on screen.",
+    "sql": "WITH big AS (\n  SELECT r.title_id, r.rating\n  FROM ratings r JOIN titles t ON t.title_id = r.title_id\n  WHERE r.votes > 25000 AND t.type = 'movie'\n),\ndirs AS (\n  SELECT c.person_id, big.rating,\n         MAX(c.category IN ('actor', 'actress')) AS stars\n  FROM big CROSS JOIN crew c ON c.title_id = big.title_id\n  WHERE c.category IN ('director', 'actor', 'actress')\n  GROUP BY big.title_id, c.person_id\n  HAVING MAX(c.category = 'director') = 1\n)\nSELECT p.name,\n       COUNT(*) AS films,\n       SUM(stars) AS cast_themselves,\n       ROUND(AVG(CASE WHEN stars = 1 THEN rating END), 2) AS avg_when_starring,\n       ROUND(AVG(CASE WHEN stars = 0 THEN rating END), 2) AS avg_when_not,\n       ROUND(AVG(CASE WHEN stars = 1 THEN rating END)\n           - AVG(CASE WHEN stars = 0 THEN rating END), 2) AS vanity_effect\nFROM dirs JOIN people p ON p.person_id = dirs.person_id\nGROUP BY dirs.person_id\nHAVING SUM(stars) >= 3 AND SUM(1 - stars) >= 3\nORDER BY vanity_effect ASC\nLIMIT 25"
+  },
+  {
+    "title": "The remake curse: biggest drop from original to remake",
+    "description": "Pairs movies with the same title released 5+ years apart, biggest rating drop first. Flip DESC to ASC to find remakes that beat the original. Unrelated movies that merely share a title show up too, so apply judgment.",
+    "sql": "WITH big AS MATERIALIZED (\n  SELECT t.primary_title AS title, t.premiered AS year, r.rating, r.votes\n  FROM ratings r JOIN titles t ON t.title_id = r.title_id\n  WHERE r.votes > 25000 AND t.type = 'movie' AND t.premiered IS NOT NULL\n)\nSELECT o.title,\n       o.year AS original_year, o.rating AS original_rating,\n       n.year AS remake_year, n.rating AS remake_rating,\n       ROUND(o.rating - n.rating, 1) AS rating_drop\nFROM big o JOIN big n ON n.title = o.title AND n.year > o.year + 4\nORDER BY rating_drop DESC, n.votes DESC\nLIMIT 30"
+  },
+  {
+    "title": "Typecast Hall of Fame: same character, most movies",
+    "description": "Actors who played the exact same character in the most movies with 25k+ votes, and how many years they were stuck in the role.",
+    "sql": "WITH roles AS (\n  SELECT c.person_id, c.characters AS role,\n         COUNT(*) AS movies,\n         MIN(ti.premiered) AS first_year, MAX(ti.premiered) AS last_year,\n         AVG(r.rating) AS avg_rating\n  FROM ratings r\n  CROSS JOIN titles ti ON ti.title_id = r.title_id AND ti.type = 'movie'\n  CROSS JOIN crew c ON c.title_id = r.title_id\n  WHERE r.votes > 25000\n    AND c.category IN ('actor', 'actress')\n    AND c.characters IS NOT NULL\n    AND c.characters NOT LIKE '%Himself%' AND c.characters NOT LIKE '%Herself%'\n  GROUP BY c.person_id, c.characters\n  HAVING COUNT(*) >= 4\n)\nSELECT p.name,\n       REPLACE(TRIM(roles.role, '[]' || char(34)), char(34) || ',' || char(34), ' / ') AS role,\n       roles.movies,\n       roles.first_year, roles.last_year,\n       roles.last_year - roles.first_year AS years_in_role,\n       ROUND(roles.avg_rating, 1) AS avg_rating\nFROM roles JOIN people p ON p.person_id = roles.person_id\nORDER BY roles.movies DESC, years_in_role DESC\nLIMIT 40"
+  }
+]

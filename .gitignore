@@ -1,0 +1,13 @@
+data/
+.env
+venv/
+__pycache__/
+*.py[cod]
+.imdb-cache/
+*.db
+*.db.new
+*.tsv.gz
+*.part
+update.log
+.DS_Store
+__pycache__/
