@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>IMDb SQL</title>
   <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.20/codemirror.min.css">
 </head>
 <body class="wide">
   <p><a href="/">&larr; Search</a></p>
@@ -14,24 +15,34 @@
 
   <div class="layout">
     <aside id="schema-panel">
-      <h3>Schema</h3>
-      <p class="m">Free to browse: doesn't use your query budget. Click a column to insert it, or
-      <b>SELECT</b> to start a query.</p>
-      <input id="schema-filter" placeholder="Filter tables / columns...">
-      <div id="schema">loading...</div>
-      <details class="rawgroup">
-        <summary>Common values</summary>
-        <p class="m"><b>titles.type</b>: movie, tvSeries, tvMiniSeries, tvMovie, tvEpisode, tvSpecial, short, tvShort, video, videoGame<br>
-        <b>crew.category</b>: actor, actress, director, writer, producer, composer, cinematographer, editor, self</p>
+      <details id="schema-disclosure" open>
+        <summary>Schema</summary>
+        <p class="m">Browse tables and columns.</p>
+        <input id="schema-filter" placeholder="Filter tables / columns..." aria-label="Filter schema">
+        <div id="schema">loading...</div>
+        <details class="rawgroup">
+          <summary>Common values</summary>
+          <p class="m"><b>titles.type</b>: movie, tvSeries, tvMiniSeries, tvMovie, tvEpisode, tvSpecial, short, tvShort, video, videoGame<br>
+          <b>crew.category</b>: actor, actress, director, writer, producer, composer, cinematographer, editor, self</p>
+        </details>
       </details>
     </aside>
 
     <main>
-      <label for="examples"><b>Examples</b></label>
-      <select id="examples"></select>
+      <div class="query-tools">
+        <label for="examples">Examples
+          <select id="examples"></select>
+        </label>
+        <label for="query-history">Recent queries
+          <select id="query-history"><option value="">No recent queries</option></select>
+        </label>
+      </div>
+      <button id="clear-history" class="mini" type="button">Clear history</button>
       <p class="m" id="example-desc"></p>
 
-      <textarea id="sql" spellcheck="false"></textarea>
+      <div id="sql-editor-shell">
+        <textarea id="sql" spellcheck="false" aria-label="SQL query"></textarea>
+      </div>
       <p><button id="run">Run</button> <span class="m" id="status"></span>
          <span class="m">(Ctrl/Cmd + Enter)</span></p>
       <div class="err" id="err"></div>
@@ -66,6 +77,8 @@
 
   <footer class="m" id="info"></footer>
   <script src="/static/vendor/chart.umd.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.20/codemirror.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.20/mode/sql/sql.min.js"></script>
   <script src="/static/sql.js"></script>
   <script src="/static/info.js"></script>
 </body>

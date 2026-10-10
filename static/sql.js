@@ -1,10 +1,102 @@
 const $ = id => document.getElementById(id);
 const el = (tag, text, cls) => { const e = document.createElement(tag); if (text != null) e.textContent = text; if (cls) e.className = cls; return e; };
+const sqlEditor = window.CodeMirror ? window.CodeMirror.fromTextArea($('sql'), {
+  mode: 'text/x-sqlite',
+  lineNumbers: true,
+  lineWrapping: true,
+  matchBrackets: true,
+  autoCloseBrackets: true,
+  extraKeys: {
+    'Ctrl-Enter': () => run(),
+    'Cmd-Enter': () => run(),
+  },
+}) : null;
+
+function sqlValue() {
+  return sqlEditor ? sqlEditor.getValue() : $('sql').value;
+}
+
+function setSqlValue(value) {
+  if (sqlEditor) sqlEditor.setValue(value);
+  else $('sql').value = value;
+}
+
+function focusSql() {
+  if (sqlEditor) sqlEditor.focus();
+  else $('sql').focus();
+}
+
+const HISTORY_KEY = 'imdb-sql-history';
+const MAX_HISTORY = 10;
+
+function readHistory() {
+  try {
+    const items = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
+    return Array.isArray(items) ? items.filter(item => typeof item === 'string').slice(0, MAX_HISTORY) : [];
+  } catch {
+    return [];
+  }
+}
+
+let queryHistory = readHistory();
+
+function renderHistory() {
+  const select = $('query-history');
+  select.replaceChildren(el('option', queryHistory.length ? 'Choose a recent query' : 'No recent queries'));
+  queryHistory.forEach((sql, index) => {
+    const option = el('option', sql.split('\n')[0].slice(0, 80));
+    option.value = index;
+    select.appendChild(option);
+  });
+  $('clear-history').disabled = queryHistory.length === 0;
+}
+
+function saveHistory(sql) {
+  sql = sql.trim();
+  if (!sql) return;
+  queryHistory = [sql, ...queryHistory.filter(item => item !== sql)].slice(0, MAX_HISTORY);
+  try {
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(queryHistory));
+  } catch {
+    // Keep the current session usable when storage is unavailable.
+  }
+  renderHistory();
+}
+
+renderHistory();
+$('query-history').onchange = event => {
+  const sql = queryHistory[+event.target.value];
+  if (sql) {
+    setSqlValue(sql);
+    focusSql();
+  }
+};
+$('clear-history').onclick = () => {
+  queryHistory = [];
+  try {
+    localStorage.removeItem(HISTORY_KEY);
+  } catch {
+    // The in-memory history is still cleared.
+  }
+  renderHistory();
+};
 
 // Tables people should reach for first; anything else goes under "Raw tables".
 const PREFERRED = ['titles', 'ratings', 'people', 'crew', 'episodes', 'akas'];
+const quoteIdentifier = name => '"' + name.replaceAll('"', '""') + '"';
+
+const schemaDisclosure = $('schema-disclosure');
+const schemaBreakpoint = window.matchMedia('(max-width: 800px)');
+const syncSchemaDisclosure = () => { schemaDisclosure.open = !schemaBreakpoint.matches; };
+syncSchemaDisclosure();
+schemaBreakpoint.addEventListener('change', syncSchemaDisclosure);
 
 function insertAtCursor(text) {
+  if (sqlEditor) {
+    sqlEditor.replaceSelection(text);
+    sqlEditor.focus();
+    return;
+  }
   const t = $('sql');
   t.setRangeText(text, t.selectionStart, t.selectionEnd, 'end');
   t.focus();
@@ -21,9 +113,10 @@ function tableBlock(o) {
   sum.appendChild(sel);
   d.appendChild(sum);
   o.columns.forEach(c => {
-    const row = el('div', null, 'col');
+    const row = el('button', null, 'col');
+    row.type = 'button';
     row.append(el('span', c.name), el('span', ' ' + c.type, 'm'));
-    row.onclick = () => insertAtCursor(c.name);
+    row.onclick = () => insertAtCursor(quoteIdentifier(o.name) + '.' + quoteIdentifier(c.name));
     d.appendChild(row);
   });
   return d;
@@ -62,7 +155,7 @@ function loadExample(i) {
   const e = examples[i];
   if (!e) return;
   pendingHint = e.chart || null;
-  $('sql').value = e.sql;
+  setSqlValue(e.sql);
   $('example-desc').textContent = e.description || '';
 }
 fetch('/static/examples.json').then(r => r.json()).then(list => {
@@ -277,11 +370,12 @@ async function run() {
   $('run').disabled = true;
   $('err').textContent = '';
   $('status').textContent = 'running...';
+  saveHistory(sqlValue());
   try {
     const r = await fetch('/api/query', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({sql: $('sql').value}),
+      body: JSON.stringify({sql: sqlValue()}),
     });
     let d;
     try { d = await r.json(); }
