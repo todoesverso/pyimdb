@@ -291,6 +291,13 @@ class QueryError(Exception):
     pass
 
 
+def normalized_user_sql():
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict) or not isinstance(payload.get("sql"), str):
+        return ""
+    return payload["sql"].strip().rstrip(";")
+
+
 def bucket_tokens(ip):
     """Refill and return an IP's remaining budget. Call with buckets_lock held."""
     now = time.monotonic()
@@ -366,7 +373,7 @@ def run_user_query(sql):
 @app.post("/api/query")
 @limiter.limit("12 per minute")
 def user_query():
-    sql = ((request.get_json(silent=True) or {}).get("sql") or "").strip().rstrip(";")
+    sql = normalized_user_sql()
     if not sql:
         return jsonify(error="Empty query."), 400
     if len(sql) > MAX_SQL_LEN:
@@ -405,6 +412,7 @@ def user_query():
     }
     if error:
         return jsonify(error=error, **meta), 400
+    assert result is not None
     return jsonify(**result, **meta)
 
 

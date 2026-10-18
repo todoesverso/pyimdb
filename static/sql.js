@@ -680,6 +680,7 @@ async function run() {
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({sql: sqlValue()}),
     });
+    const cacheHit = r.headers.get('X-Cache-Status') === 'HIT';
     let d;
     try { d = await r.json(); }
     catch { d = {error: r.status === 429 ? 'Too many requests. Slow down.' : 'Server error (' + r.status + ')'}; }
@@ -693,8 +694,9 @@ async function run() {
 
     if (d.ms !== undefined) {
       $('status').textContent =
+        (cacheHit ? 'cached · ' : '') +
         (d.rows ? d.rows.length + ' rows' + (d.truncated ? ' (truncated)' : '') + ' · ' : '') +
-        d.ms + ' ms · budget ' + d.budget_left + '/' + d.budget_max + ' s';
+        d.ms + ' ms' + (cacheHit ? '' : ' · budget ' + d.budget_left + '/' + d.budget_max + ' s');
     } else {
       $('status').textContent = '';
     }
