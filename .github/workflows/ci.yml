@@ -48,8 +48,6 @@ jobs:
         run: python -m json.tool static/examples.json > /dev/null
 
       - name: Validate Docker Compose configuration
-        env:
-          TUNNEL_TOKEN: ci-placeholder
         run: docker compose config --quiet
 
       - name: Build application image

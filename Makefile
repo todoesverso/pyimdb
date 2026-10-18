@@ -3,7 +3,6 @@
 # Typical first run:   make import && make index && make up
 # Daily auto-update:   make cron-install   (runs `make update` from cron)
 # Needs pyimdb.py (the IMDb -> SQLite loader) in this folder.
-# Go public:           (put TUNNEL_TOKEN in .env)  make tunnel
 
 COMPOSE     ?= docker compose
 DATA_DIR    ?= data
@@ -21,8 +20,8 @@ PY          := venv/bin/python
 
 .DEFAULT_GOAL := help
 .PHONY: help fetch import import-slim update update-slim cron-install cron-remove index build-search \
-	    build up down restart logs ps stats shell health test tunnel tunnel-logs tunnel-stop \
-	    unit-test venv dev dev-index clean check-data check-env check-pyimdb
+	    build up down restart logs ps stats shell health test unit-test venv dev dev-index clean \
+	    check-data check-pyimdb
 
 help: ## Show this help
 	@echo "imdb-web targets (override vars like: make up PORT=9000):"
@@ -57,6 +56,7 @@ update: ## Daily job: fetch fresh data into a NEW db, index it, swap it in, rest
 	$(MAKE) index INDEX_DB=$(DB).new
 	mv -f $(DB).new $(DB)
 	$(COMPOSE) restart app || $(COMPOSE) up -d app
+	$(COMPOSE) up -d --force-recreate nginx
 	@echo "== update finished $$(date -u +%FT%TZ)"
 
 update-slim: ## Same as update, but only the 4 datasets the app needs (needs ~half the disk)
@@ -78,24 +78,25 @@ cron-remove: ## Remove the daily cron job
 build: ## Build the Docker image
 	$(COMPOSE) build app
 
-up: check-data ## Build (if needed) and start the app in the background
-	$(COMPOSE) up -d --build app
+up: check-data ## Build (if needed) and start the app behind Nginx
+	$(COMPOSE) up -d --build app nginx
 	@echo "App running at http://localhost:$(PORT)"
 
-down: ## Stop and remove all containers (app, tunnel, tools); data is kept
-	$(COMPOSE) --profile tunnel --profile tools down --remove-orphans
+down: ## Stop and remove all containers (app, Nginx, tools); data is kept
+	$(COMPOSE) --profile tools down --remove-orphans
 
-restart: ## Restart the app (needed after replacing the DB file)
+restart: ## Restart the app and clear the Nginx cache
 	$(COMPOSE) restart app
+	$(COMPOSE) up -d --force-recreate nginx
 
 logs: ## Follow the app logs
 	$(COMPOSE) logs --tail=100 -f app
 
 ps: ## Show container status
-	$(COMPOSE) --profile tunnel ps
+	$(COMPOSE) ps
 
 stats: ## Live CPU / memory usage of the containers
-	docker stats --no-stream $$($(COMPOSE) --profile tunnel ps -q)
+	docker stats --no-stream $$($(COMPOSE) ps -q)
 
 shell: ## Open a shell inside the running app container
 	$(COMPOSE) exec app sh
@@ -118,17 +119,6 @@ test: ## Smoke-test search, the SQL console, and write-protection
 unit-test: ## Run isolated application unit tests (no live server or IMDb database needed)
 	$(PY) -m unittest discover -s tests -v
 
-# -------------------------------------------------------------- public
-
-tunnel: check-env check-data ## Start the app + Cloudflare Tunnel (public access)
-	$(COMPOSE) --profile tunnel up -d --build
-
-tunnel-logs: ## Follow the Cloudflare Tunnel logs
-	$(COMPOSE) --profile tunnel logs --tail=100 -f cloudflared
-
-tunnel-stop: ## Stop only the tunnel (site goes offline, app keeps running locally)
-	$(COMPOSE) --profile tunnel stop cloudflared
-
 # ------------------------------------------------- local dev (no Docker)
 
 venv: $(VENV_STAMP) ## Create the local virtualenv (app deps + certifi for pyimdb.py)
@@ -146,8 +136,8 @@ dev-index: $(VENV_STAMP) check-data ## Build the search index locally, without D
 
 # ------------------------------------------------------------- cleanup
 
-clean: ## Remove containers, built images and the local venv (keeps data/ and .env)
-	$(COMPOSE) --profile tunnel --profile tools down --remove-orphans --rmi local
+clean: ## Remove containers, built images and the local venv (keeps data/)
+	$(COMPOSE) --profile tools down --remove-orphans --rmi local
 	rm -rf venv __pycache__
 
 # ------------------------------------------------------------- helpers
@@ -157,6 +147,3 @@ check-data:
 
 check-pyimdb:
 	@test -f $(PYIMDB) || { echo "Missing $(PYIMDB) in this folder (or run: make import PYIMDB=/path/to/pyimdb.py)"; exit 1; }
-
-check-env:
-	@{ test -f .env && grep -Eq '^TUNNEL_TOKEN=.+' .env; } || { echo "Set TUNNEL_TOKEN in .env first (see .env.example)."; exit 1; }

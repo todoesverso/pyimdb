@@ -655,7 +655,7 @@ $('chart-download').onclick = () => {
 function loadChartLibrary() {
   if (window.Chart) return;
   const script = document.createElement('script');
-  script.src = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.5.1/chart.umd.min.js';
+  script.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js';
   script.async = true;
   script.onload = () => {
     $('chart-download').textContent = 'Download PNG';

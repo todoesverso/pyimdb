@@ -94,16 +94,16 @@ class AppTestCase(unittest.TestCase):
             response = self.client.get(
                 f"/api/search?q={search_term}",
                 headers={
-                    "CF-Connecting-IP": "203.0.113.7",
-                    "CF-Ray": "test-ray-id",
+                    "X-Real-IP": "203.0.113.7",
+                    "X-Request-ID": "a" * 32,
                 },
             )
 
         entry = json.loads(captured.records[0].getMessage())
         self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["X-Request-ID"], "a" * 32)
         self.assertEqual(response.headers["X-Request-ID"], entry["request_id"])
         self.assertEqual(entry["client_ip"], "203.0.113.7")
-        self.assertEqual(entry["cf_ray"], "test-ray-id")
         self.assertEqual(entry["method"], "GET")
         self.assertEqual(entry["path"], "/api/search")
         self.assertEqual(entry["status"], 200)

@@ -20,7 +20,7 @@ make index
 make up
 ```
 
-Open <http://localhost:8000>. `make import` downloads IMDb's public TSV datasets, builds `data/imdb.db`, and creates the app's additional indexes. `make index` adds the FTS5 search index, compatibility views, and database metadata. The app mounts the database read-only.
+Open <http://localhost:8000>. Docker Compose serves the app through Nginx; Flask is not published directly. `make import` downloads IMDb's public TSV datasets, builds `data/imdb.db`, and creates the app's additional indexes. `make index` adds the FTS5 search index, compatibility views, and database metadata. The app mounts the database read-only.
 
 To import only the datasets needed for core search and title/person browsing:
 
@@ -51,17 +51,11 @@ The local server binds to `127.0.0.1:8000`. Override the port or database path w
 
 On a Linux host with `flock`, `make cron-install` installs a daily update job (default 05:30). Set `UPDATE_TARGET=update-slim` to use the slim update. Use `make cron-remove` to remove the job.
 
-## Public Access with Cloudflare Tunnel
+## Nginx Proxy and Cache
 
-1. Copy `.env.example` to `.env` and set `TUNNEL_TOKEN` to the token for your Cloudflare Tunnel.
-2. In Cloudflare Zero Trust, configure a public hostname route to `http://app:8000`.
-3. Start the app and tunnel:
+Compose publishes Nginx on `127.0.0.1:8000` by default and keeps Flask on the private Compose network. Nginx caches successful search, title-detail, and person-detail GET responses for 30 seconds, with a 64 MB cache limit. Cache keys include the complete request URI, including search parameters. The SQL POST endpoint is never cached.
 
-```sh
-make tunnel
-```
-
-The app's host port is bound to localhost; Cloudflare Tunnel connects outbound, so no router port forwarding is needed. Keep `.env` secret and do not commit it.
+Only Nginx caches these API responses. A cache HIT is served without reaching Flask or consuming Flask's request limit; a MISS reaches Flask, queries SQLite, and is rate-limited. `make restart` recreates Nginx to clear its cache, and the database update targets do the same automatically. If exposing this service beyond localhost, terminate TLS and apply appropriate firewall rules; the Nginx listener is plain HTTP. Set `BIND_ADDRESS=0.0.0.0` to bind Nginx on all interfaces.
 
 ## Features and Safety
 
@@ -69,8 +63,9 @@ The app's host port is bound to localhost; Cloudflare Tunnel connects outbound, 
 - SQL console with schema browser, examples, local recent-query history, charts, and chart export
 - SQL is run against a read-only SQLite connection. The console limits query duration, result rows, cell length, request rates, per-IP query time, and concurrent queries.
 - The query budgets are in process memory, so the app is configured for one Gunicorn worker with multiple threads.
-- JSON access logs go to container stdout and include client IP, Cloudflare Ray ID, request ID, method, path, status, duration, response size, and user agent. Query strings and request bodies are intentionally omitted; `/healthz` probes are not logged. Docker retains at most five 10 MB log files, so export logs elsewhere if longer retention is needed.
-- Chart.js and CodeMirror are loaded from pinned CDNJS URLs. The SQL editor falls back to a textarea, and charts fall back to native SVG if their CDN library is unavailable.
+- The served database is treated as immutable. Arbitrary SQL queries are not cached.
+- JSON access logs go to container stdout and include client IP, request ID, method, path, status, duration, response size, and user agent. Nginx logs cache hits with their cache status. Query strings and request bodies are intentionally omitted; `/healthz` probes are not logged. Docker retains at most five 10 MB log files, so export logs elsewhere if longer retention is needed.
+- Chart.js and CodeMirror are loaded from pinned jsDelivr URLs. The SQL editor falls back to a textarea, and charts fall back to native SVG if their CDN library is unavailable.
 
 The database is not included in Git. `data/`, download caches, and generated database files are ignored. Build or copy the database onto the host before starting the app.
 

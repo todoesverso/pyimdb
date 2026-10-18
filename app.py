@@ -21,7 +21,6 @@ from pathlib import Path
 
 from flask import Flask, g, jsonify, render_template, request
 from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
 
 DB_PATH = os.environ.get("IMDB_DB", "imdb.db")
 # The DB is static while served, so open it immutable: no locks, and it works
@@ -35,9 +34,14 @@ def ro_uri():
 
 
 app = Flask(__name__)
-# Behind Cloudflare Tunnel the real client IP is in CF-Connecting-IP
+
+
+def client_ip():
+    return request.headers.get("X-Real-IP") or request.remote_addr
+
+
 limiter = Limiter(
-    key_func=lambda: request.headers.get("CF-Connecting-IP", get_remote_address()),
+    key_func=client_ip,
     app=app,
     default_limits=["60 per minute"],
     storage_uri="memory://",
@@ -54,7 +58,10 @@ if not access_logger.handlers:
 
 @app.before_request
 def start_access_log():
-    g.request_id = uuid.uuid4().hex
+    request_id = request.headers.get("X-Request-ID", "")
+    g.request_id = (
+        request_id if re.fullmatch(r"[0-9a-f]{32}", request_id) else uuid.uuid4().hex
+    )
     g.request_started_at = time.monotonic()
 
 
@@ -66,8 +73,7 @@ def write_access_log(response):
         entry = {
             "timestamp": datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
             "request_id": request_id,
-            "cf_ray": request.headers.get("CF-Ray", "")[:80],
-            "client_ip": (request.headers.get("CF-Connecting-IP") or request.remote_addr or "")[:64],
+            "client_ip": (client_ip() or "")[:64],
             "method": request.method,
             "path": request.path,
             "status": response.status_code,
@@ -180,10 +186,9 @@ def search():
     if not tokens:
         return jsonify([])
     match = " ".join(f'"{t}"*' for t in tokens)  # safe: only \w chars inside quotes
-    rows = (
-        db()
-        .execute(
-            """
+    d = db()
+    title = d.execute(
+        """
         SELECT t.title_id, t.primary_title, t.type, t.premiered, r.rating, r.votes
         FROM title_fts f
         JOIN titles t ON t.title_id = f.title_id
@@ -192,17 +197,15 @@ def search():
         ORDER BY CAST(f.votes AS INTEGER) DESC
         LIMIT 25
         """,
-            (match,),
-        )
-        .fetchall()
-    )
-    return jsonify([dict(r) for r in rows])
+        (match,),
+    ).fetchall()
+    return jsonify([dict(row) for row in title])
 
 
 @app.get("/api/title/<title_id>")
 def title(title_id):
     d = db()
-    t = d.execute(
+    title_row = d.execute(
         """
         SELECT t.*, r.rating, r.votes FROM titles t
         LEFT JOIN ratings r ON r.title_id = t.title_id
@@ -210,7 +213,7 @@ def title(title_id):
         """,
         (title_id,),
     ).fetchone()
-    if not t:
+    if not title_row:
         return jsonify(error="not found"), 404
     cast = d.execute(
         """
@@ -220,18 +223,21 @@ def title(title_id):
         """,
         (title_id,),
     ).fetchall()
-    return jsonify(title=dict(t), cast=[dict(c) for c in cast])
+    return jsonify(title=dict(title_row), cast=[dict(person) for person in cast])
 
 
 @app.get("/api/person/<person_id>")
 def person(person_id):
     d = db()
-    p = d.execute("SELECT * FROM people WHERE person_id = ?", (person_id,)).fetchone()
-    if not p:
+    person = d.execute(
+        "SELECT * FROM people WHERE person_id = ?", (person_id,)
+    ).fetchone()
+    if not person:
         return jsonify(error="not found"), 404
-    films = d.execute(
+    titles = d.execute(
         """
-        SELECT t.title_id, t.primary_title, t.type, t.premiered, c.category, r.rating, r.votes
+        SELECT t.title_id, t.primary_title, t.type, t.premiered,
+               c.category, r.rating, r.votes
         FROM crew c
         JOIN titles t ON t.title_id = c.title_id
         LEFT JOIN ratings r ON r.title_id = t.title_id
@@ -240,7 +246,7 @@ def person(person_id):
         """,
         (person_id,),
     ).fetchall()
-    return jsonify(person=dict(p), titles=[dict(f) for f in films])
+    return jsonify(person=dict(person), titles=[dict(title) for title in titles])
 
 
 # ---------------------------------------------------------------------------
@@ -265,7 +271,7 @@ MAX_SECONDS = 5.0  # hard limit for one query
 BUCKET_CAPACITY = 30.0  # seconds of query time an IP can bank
 BUCKET_REFILL = 0.5  # seconds of query time regained per real second
 MIN_CHARGE = 0.05  # every query costs at least this much
-MAX_CONCURRENT = 2  # queries running at once on the Pi
+MAX_CONCURRENT = 4  # queries running at once
 
 slots = threading.BoundedSemaphore(MAX_CONCURRENT)
 buckets = {}  # ip -> (tokens, last_update)
@@ -283,11 +289,6 @@ BLOCKED_FUNCS = {
 
 class QueryError(Exception):
     pass
-
-
-def client_ip():
-    # Trusted only because gunicorn listens on 127.0.0.1 behind the tunnel
-    return request.headers.get("CF-Connecting-IP") or request.remote_addr
 
 
 def bucket_tokens(ip):

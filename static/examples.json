@@ -193,5 +193,36 @@
     "title": "The Most Confusing Person in IMDb",
     "description": "People credited in the widest variety of IMDb principal-credit categories, with their number of distinct credited titles.",
     "sql": "SELECT p.name, COUNT(DISTINCT c.category) AS categories, GROUP_CONCAT(DISTINCT c.category) AS jobs, COUNT(DISTINCT c.title_id) AS credited_titles\nFROM crew c JOIN people p ON p.person_id = c.person_id\nGROUP BY c.person_id\nHAVING COUNT(DISTINCT c.category) >= 5\nORDER BY categories DESC, credited_titles DESC\nLIMIT 30"
+  },
+  {
+    "title": "The Best Movies of the Last 5 Years",
+    "description": "The highest-rated movies released in the current year and the previous four calendar years. Requires at least 10,000 IMDb votes. Includes release year, rating, and vote count.",
+    "sql": "SELECT t.primary_title, t.premiered AS year, r.rating, r.votes\nFROM titles t\nJOIN ratings r ON r.title_id = t.title_id\nWHERE t.type = 'movie'\n  AND t.premiered >= CAST(strftime('%Y', 'now') AS INTEGER) - 4\n  AND t.premiered <= CAST(strftime('%Y', 'now') AS INTEGER) - 0\n  AND r.votes >= 10000\nORDER BY r.rating DESC, r.votes DESC\nLIMIT 50"
+  },
+  {
+    "title": "The Best Movies from 5–10 Years Ago",
+    "description": "The highest-rated movies released in the five calendar years before the most recent five-year period. Requires at least 10,000 IMDb votes. Includes release year, rating, and vote count.",
+    "sql": "SELECT t.primary_title, t.premiered AS year, r.rating, r.votes\nFROM titles t\nJOIN ratings r ON r.title_id = t.title_id\nWHERE t.type = 'movie'\n  AND t.premiered >= CAST(strftime('%Y', 'now') AS INTEGER) - 9\n  AND t.premiered <= CAST(strftime('%Y', 'now') AS INTEGER) - 5\n  AND r.votes >= 10000\nORDER BY r.rating DESC, r.votes DESC\nLIMIT 50"
+  },
+  {
+    "title": "The Best Movies from 10–15 Years Ago",
+    "description": "The highest-rated movies released in the five calendar years 10–14 years before the current year. Requires at least 10,000 IMDb votes. Includes release year, rating, and vote count.",
+    "sql": "SELECT t.primary_title, t.premiered AS year, r.rating, r.votes\nFROM titles t\nJOIN ratings r ON r.title_id = t.title_id\nWHERE t.type = 'movie'\n  AND t.premiered >= CAST(strftime('%Y', 'now') AS INTEGER) - 14\n  AND t.premiered <= CAST(strftime('%Y', 'now') AS INTEGER) - 10\n  AND r.votes >= 10000\nORDER BY r.rating DESC, r.votes DESC\nLIMIT 50"
+  },
+  {
+    "title": "The Best Movies from 15–20 Years Ago",
+    "description": "The highest-rated movies released in the five calendar years 15–19 years before the current year. Requires at least 10,000 IMDb votes. Includes release year, rating, and vote count.",
+    "sql": "SELECT t.primary_title, t.premiered AS year, r.rating, r.votes\nFROM titles t\nJOIN ratings r ON r.title_id = t.title_id\nWHERE t.type = 'movie'\n  AND t.premiered >= CAST(strftime('%Y', 'now') AS INTEGER) - 19\n  AND t.premiered <= CAST(strftime('%Y', 'now') AS INTEGER) - 15\n  AND r.votes >= 10000\nORDER BY r.rating DESC, r.votes DESC\nLIMIT 50"
+  },
+  {
+    "title": "The Best Movies from 20–25 Years Ago",
+    "description": "The highest-rated movies released in the five calendar years 20–24 years before the current year. Requires at least 10,000 IMDb votes. Includes release year, rating, and vote count.",
+    "sql": "SELECT t.primary_title, t.premiered AS year, r.rating, r.votes\nFROM titles t\nJOIN ratings r ON r.title_id = t.title_id\nWHERE t.type = 'movie'\n  AND t.premiered >= CAST(strftime('%Y', 'now') AS INTEGER) - 24\n  AND t.premiered <= CAST(strftime('%Y', 'now') AS INTEGER) - 20\n  AND r.votes >= 10000\nORDER BY r.rating DESC, r.votes DESC\nLIMIT 50"
+  },
+  {
+    "title": "The Best Movies from 25–30 Years Ago",
+    "description": "The highest-rated movies released in the five calendar years 25–29 years before the current year. Requires at least 10,000 IMDb votes. Includes release year, rating, and vote count.",
+    "sql": "SELECT t.primary_title, t.premiered AS year, r.rating, r.votes\nFROM titles t\nJOIN ratings r ON r.title_id = t.title_id\nWHERE t.type = 'movie'\n  AND t.premiered >= CAST(strftime('%Y', 'now') AS INTEGER) - 29\n  AND t.premiered <= CAST(strftime('%Y', 'now') AS INTEGER) - 25\n  AND r.votes >= 10000\nORDER BY r.rating DESC, r.votes DESC\nLIMIT 50"
   }
+
 ]
